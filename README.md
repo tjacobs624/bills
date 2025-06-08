@@ -11,6 +11,12 @@ npm install
 npm install --prefix client
 ```
 
+Start only the API server (use this if you don't need the client running):
+
+```bash
+npm start
+```
+
 Run the tests:
 
 ```bash
@@ -23,6 +29,13 @@ Start the API server and React client concurrently:
 
 ```bash
 npm run dev
+```
+
+This runs both the backend and frontend together. If you only want to start the
+backend API server, run:
+
+```bash
+npm start
 ```
 
 The API server runs on `http://localhost:3001` and the React app runs on `http://localhost:5173`.
