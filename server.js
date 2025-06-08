@@ -47,6 +47,34 @@ app.post('/api/paychecks', (req, res) => {
   });
 });
 
+app.post('/api/paychecks/generate', (req, res) => {
+  const { startDate, amount, count } = req.body;
+  if (!startDate || !amount || !count) {
+    return res.status(400).json({error: 'startDate, amount and count are required'});
+  }
+
+  const date = new Date(startDate);
+  db.serialize(() => {
+    const stmt = db.prepare('INSERT INTO paychecks(date, amount) VALUES(?, ?)');
+    for (let i = 0; i < count; i++) {
+      stmt.run(date.toISOString().slice(0, 10), amount);
+      date.setDate(date.getDate() + 14);
+    }
+    stmt.finalize(err => {
+      if (err) return res.status(500).json({error: err.message});
+      res.json({created: count});
+    });
+  });
+});
+
+app.put('/api/paychecks/:id', (req, res) => {
+  const { date, amount } = req.body;
+  db.run('UPDATE paychecks SET date = ?, amount = ? WHERE id = ?', [date, amount, req.params.id], function(err) {
+    if (err) return res.status(500).json({error: err.message});
+    res.json({changes: this.changes});
+  });
+});
+
 app.get('/api/bills', (req, res) => {
   db.all('SELECT * FROM bills', [], (err, rows) => {
     if (err) return res.status(500).json({error: err.message});
@@ -74,11 +102,31 @@ app.get('/api/paychecks/:id/summary', (req, res) => {
 });
 
 app.post('/api/bills', (req, res) => {
-  const {description, amount, dueDate, paycheckId} = req.body;
-  db.run('INSERT INTO bills(description, amount, dueDate, paycheckId) VALUES(?, ?, ?, ?)', [description, amount, dueDate, paycheckId], function(err) {
-    if (err) return res.status(500).json({error: err.message});
-    res.json({id: this.lastID});
-  });
+  const { description, amount, dueDate, paycheckId } = req.body;
+
+  const insertBill = (assignedId) => {
+    db.run(
+      'INSERT INTO bills(description, amount, dueDate, paycheckId) VALUES(?, ?, ?, ?)',
+      [description, amount, dueDate, assignedId],
+      function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ id: this.lastID, paycheckId: assignedId });
+      }
+    );
+  };
+
+  if (paycheckId) {
+    insertBill(paycheckId);
+  } else {
+    db.get(
+      'SELECT id FROM paychecks WHERE date <= ? ORDER BY date DESC LIMIT 1',
+      [dueDate],
+      (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        insertBill(row ? row.id : null);
+      }
+    );
+  }
 });
 
 if (require.main === module) {
